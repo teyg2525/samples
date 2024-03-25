@@ -1,0 +1,263 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_svg/svg.dart';
+import 'package:kava_land/gen/assets.gen.dart';
+import 'dart:math' as math;
+
+import '../constants/colors.dart';
+import '../constants/text_styles.dart';
+
+class CustomFloatingActionButton extends StatefulWidget {
+  const CustomFloatingActionButton(
+      {required this.childrens, this.scrollController, super.key});
+
+  final ScrollController? scrollController;
+  final Map<Widget, Function> childrens;
+
+  @override
+  State<CustomFloatingActionButton> createState() =>
+      _CustomFloatingActionButtonState();
+}
+
+class _CustomFloatingActionButtonState extends State<CustomFloatingActionButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _expandAnimation;
+
+  ScrollController? _scrollController;
+
+  bool _isVisible = true;
+  bool _isOpened = false;
+
+  @override
+  void initState() {
+    _animationController = AnimationController(
+        value: _isOpened ? 1 : 0,
+        duration: const Duration(milliseconds: 300),
+        vsync: this);
+
+    _expandAnimation = CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.fastOutSlowIn,
+        reverseCurve: Curves.easeOutQuad);
+
+    _scrollController = widget.scrollController;
+
+    _scrollController?.addListener(scrollListener);
+
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+
+    widget.scrollController?.removeListener(scrollListener);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.scrollController != _scrollController) {
+      _scrollController?.removeListener(scrollListener);
+      _scrollController = widget.scrollController;
+      _scrollController?.addListener(scrollListener);
+    }
+
+    return Visibility(
+        visible: _isVisible,
+        maintainAnimation: true,
+        maintainState: true,
+        child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.fastOutSlowIn,
+            opacity: _isVisible ? 1 : 0,
+            child: SizedBox.expand(
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.bottomRight,
+                children: [
+                  ..._buildExpandableFabButton(),
+                  _tapToOpen(),
+                ],
+              ),
+            )));
+  }
+
+  _toggle() {
+    _isOpened = !_isOpened;
+
+    if (_isOpened) {
+      _animationController.forward();
+    } else {
+      _animationController.reverse();
+    }
+  }
+
+  Widget _tapToOpen() {
+    return Positioned(
+      bottom: 20,
+      right: 0,
+      child: AnimatedBuilder(
+        animation: _expandAnimation,
+        builder: (context, child) => Transform.rotate(
+          angle: _expandAnimation.value * (315 * math.pi / 180),
+          child: FloatingActionButton(
+            onPressed: _toggle,
+            child: SvgPicture.asset(Assets.icons.addPostBig),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildExpandableFabButton() {
+    final List<Widget> children = <Widget>[];
+    final count = widget.childrens.length;
+    const step = 50;
+    final heigth = MediaQuery.of(context).size.height;
+
+    children.add(AnimatedBuilder(
+      animation: _expandAnimation,
+      builder: (context, child) {
+        return Positioned(
+          right: -20,
+          bottom: -100,
+          left: 0,
+          top: 0,
+          child: Transform.scale(
+            alignment: Alignment.bottomRight,
+            scale: _expandAnimation.value * 1.5,
+            child: GestureDetector(
+              onTap: _toggle,
+              child: Container(
+                decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.8),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(heigth / 2),
+                    )),
+              ),
+            ),
+          ),
+        );
+      },
+      child: FadeTransition(
+        opacity: _expandAnimation,
+        child: GestureDetector(
+          onTap: _toggle,
+          child: Container(
+            color: Colors.white.withOpacity(0.8),
+          ),
+        ),
+      ),
+    ));
+
+    for (var i = 0, heigthPadding = 100.0;
+        i < count;
+        i++, heigthPadding += step) {
+      final child = widget.childrens.entries.elementAt(i);
+      children.add(_ExpandableFab(
+          heigthPadding: heigthPadding,
+          progress: _expandAnimation,
+          onPressed: () {
+            _toggle();
+            child.value();
+          },
+          child: child.key));
+    }
+
+    return children;
+  }
+
+  scrollListener() {
+    if (widget.scrollController!.offset ==
+        widget.scrollController!.positions.last.maxScrollExtent) {
+      if (_isVisible) {
+        setState(() {
+          _isVisible = false;
+        });
+      }
+    } else {
+      if (!_isVisible) {
+        setState(() {
+          _isVisible = true;
+        });
+      }
+    }
+  }
+}
+
+class _ExpandableFab extends StatelessWidget {
+  const _ExpandableFab(
+      {Key? key,
+      required this.heigthPadding,
+      required this.progress,
+      required this.onPressed,
+      required this.child})
+      : super(key: key);
+
+  final double heigthPadding;
+  final Animation<double> progress;
+  final Function() onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: progress,
+      builder: (context, child) {
+        return Positioned(
+          right: 10,
+          bottom: heigthPadding,
+          child: Transform.scale(
+            alignment: Alignment.centerRight,
+            scale: progress.value,
+            child: child,
+          ),
+        );
+      },
+      child: FadeTransition(
+        opacity: progress,
+        child: InkWell(
+          onTap: onPressed,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class FloatingActionButtonOption extends StatelessWidget {
+  const FloatingActionButtonOption({
+    required this.icon,
+    required this.text,
+    super.key,
+  });
+
+  final String icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Text(
+            text,
+            style: TextStyles.roboto12MediumMain,
+          ),
+          const SizedBox(width: 24),
+          Material(
+            elevation: 2,
+            shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(20))),
+            color: whiteColor,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: SvgPicture.asset(
+                icon,
+                colorFilter:
+                    const ColorFilter.mode(ctaDefaultcolor, BlendMode.srcIn),
+              ),
+            ),
+          )
+        ],
+      );
+}
